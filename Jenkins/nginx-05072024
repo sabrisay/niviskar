@@ -1,0 +1,67 @@
+pipeline {
+    agent any // Run on any available agent
+
+    environment {
+        ASG_NAME = 'your-auto-scaling-group-name'
+        INCREMENT_SIZE = 2 // Number of instances to add during rotation
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Check out your repository that contains necessary scripts
+                checkout scm
+            }
+        }
+
+        stage('Rotate ASG Instances') {
+            steps {
+                script {
+                    // Increase ASG capacity
+                    sh """
+                        aws autoscaling update-auto-scaling-group --auto-scaling-group-name $ASG_NAME --desired-capacity \$(\$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].DesiredCapacity') + $INCREMENT_SIZE)
+                        echo "Increased ASG capacity."
+                    """
+
+                    // Wait for new instances to launch and become healthy
+                    sh """
+                        while [[ \$(aws autoscaling describe-auto-scaling-instances --query 'AutoScalingInstances[?AutoScalingGroupName==\`'$ASG_NAME'\`].[LifecycleState]' --output text | grep -c "InService") -lt \$(\$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].DesiredCapacity')) ]]; do
+                            echo "Waiting for new instances to be in service..."
+                            sleep 30
+                        done
+                    """
+
+                    // Optionally update the launch template
+                    // sh 'aws autoscaling update-auto-scaling-group --auto-scaling-group-name $ASG_NAME --launch-template LaunchTemplateName=your-template-name,Version=new-version'
+
+                    // Decrease ASG capacity back to original
+                    sh """
+                        aws autoscaling update-auto-scaling-group --auto-scaling-group-name $ASG_NAME --desired-capacity \$(\$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].DesiredCapacity') - $INCREMENT_SIZE)
+                        echo "Reduced ASG capacity to normal."
+                    """
+                }
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                script {
+                    // Add any cleanup scripts here if necessary
+                    echo "Performing cleanup tasks."
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Instance rotation successful.'
+        }
+        failure {
+            echo 'Instance rotation failed.'
+            // Add any notification logic here, for example:
+            // mail to: 'your-email@example.com',
+            // subject: "Failed Jenkins Build ${env.JOB_NAME} ${env.BUILD_NUMBER}"
+        }
+    }
+}
