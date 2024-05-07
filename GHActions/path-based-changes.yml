@@ -1,0 +1,51 @@
+name: Conditional Nginx Configuration Validation
+
+on:
+  pull_request:
+    branches:
+      - main  # Adjust the branch name as necessary
+    paths:
+      - 'dir1/**'
+      - 'dir2/**'
+      - 'dir3/**'
+      - 'dir4/**'
+
+jobs:
+  validate-nginx-config:
+    name: Check Nginx Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Nginx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx
+
+      - name: Determine Changed Configuration
+        id: find-config
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
+          DIRS_CHANGED=""
+          for DIR in dir1 dir2 dir3 dir4; do
+            if echo "$CHANGED_FILES" | grep -q "^$DIR/"; then
+              DIRS_CHANGED+="$DIR "
+            fi
+          done
+          echo "DIRS_CHANGED=$DIRS_CHANGED" >> $GITHUB_ENV
+          echo "Configurations changed in directories: $DIRS_CHANGED"
+
+      - name: Validate Configurations
+        if: env.DIRS_CHANGED != ''
+        run: |
+          for DIR in $DIRS_CHANGED; do
+            echo "Validating configuration in $DIR"
+            sudo cp $DIR/nginx.conf /etc/nginx/nginx.conf
+            sudo nginx -t
+            if [ $? -ne 0 ]; then
+              echo "Validation failed for $DIR"
+              exit 1
+            fi
+          done
