@@ -1,0 +1,35 @@
+name: Validate Nginx Configuration
+
+on:
+  pull_request:
+    branches:
+      - main  # Adjust the branch name as necessary
+
+jobs:
+  validate-nginx-config:
+    name: Check Nginx Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Nginx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx
+
+      - name: Copy configuration for testing
+        run: |
+          sudo cp path/to/your/nginx.conf /etc/nginx/nginx.conf  # Adjust the path as necessary
+
+      - name: Validate Nginx Configuration
+        run: |
+          sudo nginx -t
+        id: validate
+
+      - name: Fail if validation fails
+        if: steps.validate.outcome == 'failure'
+        run: |
+          echo "Nginx configuration validation failed!"
+          exit 1
