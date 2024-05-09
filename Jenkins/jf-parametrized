@@ -1,0 +1,21 @@
+pipeline {
+    agent any
+    parameters {
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['Development', 'Staging', 'Production'],
+            description: 'Select the environment where you want to deploy'
+        )
+    }
+    environment {
+        // Set environment variable based on the parameter
+        ENV_VAR = "${params.DEPLOY_ENV == 'Production' ? 'ProdValue' : params.DEPLOY_ENV == 'Staging' ? 'StageValue' : 'DevValue'}"
+    }
+    stages {
+        stage('Example') {
+            steps {
+                echo "Environment variable ENV_VAR is set to ${ENV_VAR}"
+            }
+        }
+    }
+}
