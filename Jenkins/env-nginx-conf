@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-west-2' // Set your AWS region here
+    }
+
+    stages {
+        stage('Setup AWS CLI') {
+            steps {
+                script {
+                    // Configure AWS CLI with the region from the environment variable
+                    sh "aws configure set region ${env.AWS_REGION}"
+                }
+            }
+        }
+
+        stage('Fetch Desired Capacity') {
+            steps {
+                script {
+                    // Fetch the current desired capacity from AWS ASG
+                    env.DESIRED_CAPACITY = sh(script: "aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names your-asg-name --query 'AutoScalingGroups[0].DesiredCapacity' --output text", returnStdout: true).trim()
+                    // Calculate twice the desired capacity
+                    env.TWICE_CAPACITY = "${2 * Integer.parseInt(env.DESIRED_CAPACITY)}"
+                }
+            }
+        }
+
+        stage('Scale Up ASG') {
+            steps {
+                script {
+                    // Example command to update the desired capacity of the ASG
+                    sh "aws autoscaling update-auto-scaling-group --auto-scaling-group-name your-asg-name --desired-capacity ${env.TWICE_CAPACITY}"
+                }
+            }
+        }
+
+        stage('Business Logic') {
+            steps {
+                echo 'Performing tasks with scaled up ASG...'
+                // Add your business logic here
+            }
+        }
+
+        stage('Scale Down ASG') {
+            steps {
+                script {
+                    // Scale down the ASG to the original desired capacity
+                    sh "aws autoscaling update-auto-scaling-group --auto-scaling-group-name your-asg-name --desired-capacity ${env.DESIRED_CAPACITY}"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up...'
+            // Additional cleanup steps if required
+        }
+    }
+}
