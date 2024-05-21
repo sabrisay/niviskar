@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Retrieve list of subnets
+subnets=$(aws ec2 describe-subnets --query 'Subnets[*].{ID:SubnetId,CIDR:CidrBlock}' --output json)
+
+# Loop through each subnet
+for row in $(echo "${subnets}" | jq -r '.[] | @base64'); do
+    _jq() {
+     echo ${row} | base64 --decode | jq -r ${1}
+    }
+    
+    subnet_id=$(_jq '.ID')
+    subnet_cidr=$(_jq '.CIDR')
+
+    echo "Scanning Subnet: $subnet_id with CIDR: $subnet_cidr"
+
+    # Run nmap scan
+    nmap -sn $subnet_cidr > "${subnet_id}_scan_results.txt"
+
+    echo "Results saved to ${subnet_id}_scan_results.txt"
+done
+
+echo "All subnets scanned and results saved."
