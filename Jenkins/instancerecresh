@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_DEFAULT_REGION = 'your-region' // Replace with your AWS region
+        ASG_NAME = 'your-asg-name' // Replace with your Auto Scaling Group name
+        INSTANCE_REFRESH_ID = '' // To store the instance refresh ID
+    }
+
+    stages {
+        stage('Start Instance Refresh') {
+            steps {
+                script {
+                    def startRefreshCmd = """
+                        aws autoscaling start-instance-refresh --auto-scaling-group-name ${env.ASG_NAME}
+                    """
+                    echo "Starting instance refresh..."
+                    def refreshResult = sh(script: startRefreshCmd, returnStdout: true).trim()
+                    def refreshJson = readJSON text: refreshResult
+                    env.INSTANCE_REFRESH_ID = refreshJson.InstanceRefreshId
+                    echo "Instance refresh started with ID: ${env.INSTANCE_REFRESH_ID}"
+                }
+            }
+        }
+
+        stage('Check Instance Refresh Status') {
+            steps {
+                script {
+                    timeout(time: 30, unit: 'MINUTES') { // Adjust the timeout as needed
+                        def status = 'Pending'
+                        while (status == 'Pending' || status == 'InProgress') {
+                            sleep(time: 60, unit: 'SECONDS') // Adjust the polling interval as needed
+                            def checkStatusCmd = """
+                                aws autoscaling describe-instance-refreshes --auto-scaling-group-name ${env.ASG_NAME} --instance-refresh-ids ${env.INSTANCE_REFRESH_ID}
+                            """
+                            def statusResult = sh(script: checkStatusCmd, returnStdout: true).trim()
+                            def statusJson = readJSON text: statusResult
+                            status = statusJson.InstanceRefreshes[0].Status
+                            echo "Current status: ${status}"
+                            if (status == 'Failed' || status == 'Cancelled') {
+                                error("Instance refresh failed with status: ${status}")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Instance refresh completed successfully."
+        }
+        failure {
+            echo "Instance refresh did not complete successfully."
+        }
+    }
+}
