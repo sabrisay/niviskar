@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+
+    environment {
+        // Define your environment variables here, for example, AWS credentials if necessary
+        AWS_REGION = 'us-west-2'  // Set your AWS region
+        ASG_NAME = 'your-asg-name'  // Set your ASG name
+        PREFERENCES_FILE = 'preferences.json'  // Name of the preferences JSON file
+    }
+
+    stages {
+        stage('Generate Preferences File') {
+            steps {
+                script {
+                    // Define the preferences content
+                    def preferencesContent = """
+                    {
+                        "MinHealthyPercentage": 90,
+                        "InstanceWarmup": 300,
+                        "Strategy": "Rolling"
+                    }
+                    """
+                    // Write the content to the JSON file
+                    writeFile file: PREFERENCES_FILE, text: preferencesContent
+                    echo "Preferences file created successfully."
+                }
+            }
+        }
+
+        stage('Instance Refresh') {
+            steps {
+                script {
+                    // Start the instance refresh
+                    def refreshCommand = "aws autoscaling start-instance-refresh --auto-scaling-group-name ${ASG_NAME} --preferences file://${PREFERENCES_FILE} --region ${AWS_REGION}"
+                    def refreshResult = sh(script: refreshCommand, returnStdout: true).trim()
+                    def refreshId = readJSON(text: refreshResult).InstanceRefreshId
+                    echo "Instance Refresh started with ID: ${refreshId}"
+                    
+                    // Monitor the instance refresh status
+                    def status = "Pending"
+                    while (status == "Pending" || status == "InProgress") {
+                        sleep(time: 30, unit: 'SECONDS')  // Wait for 30 seconds before checking the status again
+                        def statusCommand = "aws autoscaling describe-instance-refreshes --auto-scaling-group-name ${ASG_NAME} --region ${AWS_REGION} --query 'InstanceRefreshes[?InstanceRefreshId==\\`${refreshId}\\`].Status' --output text"
+                        status = sh(script: statusCommand, returnStdout: true).trim()
+                        echo "Current status of instance refresh: ${status}"
+                    }
+                    
+                    // Check the final status of the instance refresh
+                    if (status == "Successful") {
+                        echo "Instance Refresh completed successfully."
+                    } else {
+                        error "Instance Refresh failed with status: ${status}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
