@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Get the list of EBS snapshot IDs from your AMIs
+snapshot_ids=$(aws ec2 describe-images --owners self --query 'Images[*].BlockDeviceMappings[*].Ebs.SnapshotId' --output json | jq -r '.[][]')
+
+# Loop through each snapshot ID and describe the snapshot
+for snapshot_id in $snapshot_ids; do
+    aws ec2 describe-snapshots --snapshot-ids $snapshot_id --query 'Snapshots[*]' --output json
+done
