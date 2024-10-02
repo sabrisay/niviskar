@@ -1,0 +1,44 @@
+Runbook for Application Deployment on EKS
+
+This runbook outlines the steps required for deploying applications to EKS using Jenkins, ArgoCD, and AWS ECR. Follow these steps for a successful deployment process.
+
+1. Create a New Image
+
+	•	Trigger Jenkins Build Pipeline: To create a new image, trigger the Jenkins build pipeline by passing the desired repository tag that you want to use. This tag will represent the specific version of the application.
+	•	Jenkins Process: Jenkins will build the image and push it to the AWS ECR repository.
+	•	Ensure the correct repository and tag are passed when triggering the build.
+
+2. Access to AWS Resources
+
+	•	Request IAM Role for Service Account: If your application requires access to AWS resources (e.g., S3, DynamoDB, etc.), you will need an IAM role for your Kubernetes service account.
+	•	Submit a Ticket: Raise a ticket for the DevOps team to create the required IAM role and associate it with your service account.
+a. Storing Secrets
+	•	If your application requires secrets, use the provided Jenkins pipeline to create secrets in AWS Secrets Manager.
+	•	Ensure that you have the necessary secret names (SEN) for your secrets, so you can refer to them in your Helm chart values.
+
+3. Create Custom Values File
+
+	•	Custom Values File: After the image has been created, you need to create a custom values file for your Helm chart.
+	•	Path: path/to/your/values/directory
+	•	Refer to Sample: You can refer to the sample file (sample-values.yaml) located in the same directory for guidance on formatting and required fields.
+
+4. Submit a Pull Request (PR)
+
+	•	Initial Setup: For the first deployment, you will need assistance from the DevOps team to create the ArgoCD application definition.
+	•	Future Updates: After the initial setup, you will be able to manage subsequent deployments independently.
+	•	Update your custom values file as needed for each new deployment.
+	•	PR Approval: Raise a Pull Request (PR) with your changes, and have your team lead approve the PR.
+	•	Merge: Once the PR is merged, your application changes will be automatically deployed within 3 minutes.
+
+5. Validate Your Application Rollout
+
+	•	ArgoCD UI: Once the deployment is complete, validate your application’s rollout on the ArgoCD UI.
+	•	Ensure that all resources are synchronized and running as expected.
+
+In Case of Issues:
+
+	•	ArgoCD Events and Logs: If you encounter any issues with your deployment, you can view the events and logs in ArgoCD.
+	•	Navigate to the ArgoCD UI → Application → Events to check for errors.
+	•	Use kubectl logs and kubectl describe commands to get more detailed logs and troubleshoot the issue.
+
+Feel free to refer to the DevOps team for any additional assistance regarding the application setup or deployment process.
