@@ -1,0 +1,32 @@
+pipeline {
+    agent any
+    parameters {
+        string(name: 'SECRET_NAME', defaultValue: 'my-secret', description: 'The name of the secret')
+        string(name: 'SECRET_VALUE', defaultValue: 'new-secret-value', description: 'The value of the secret')
+    }
+    stages {
+        stage('Create Secret Version with Timestamp') {
+            steps {
+                container('awscli') {
+                    script {
+                        // Get the current timestamp in the format: YYYYMMDD-HHMMSS
+                        def currentTime = sh(script: "date +'%Y%m%d-%H%M%S'", returnStdout: true).trim()
+
+                        // Formulate the version stage name
+                        def versionStage = "v-${currentTime}"
+
+                        // Create or update the secret with the dynamically generated version stage
+                        sh """
+                        aws secretsmanager put-secret-value \
+                            --secret-id ${params.SECRET_NAME} \
+                            --secret-string "${params.SECRET_VALUE}" \
+                            --version-stages "${versionStage}"
+                        """
+
+                        echo "Created new secret version with stage: ${versionStage}"
+                    }
+                }
+            }
+        }
+    }
+}
