@@ -5,35 +5,46 @@ pipeline {
         string(name: 'SECRET_VALUE', defaultValue: 'new-secret-value', description: 'The value of the secret')
     }
     stages {
-        stage('Update Secret Version with Incremented Version') {
+        stage('Update Secret Version by Incrementing Existing Version') {
             steps {
                 container('awscli') {
                     script {
-                        // Get the current timestamp in the format: YYYYMMDD-HHMMSS
-                        def currentTime = sh(script: "date +'%Y%m%d-%H%M%S'", returnStdout: true).trim()
+                        // Fetch the current secret's version stages
+                        def currentVersionStageOutput = sh(script: """
+                            aws secretsmanager list-secret-version-ids \
+                            --secret-id ${params.SECRET_NAME} \
+                            --query 'Versions[?Stages[?contains(@, \`AWSCURRENT\`)]].Stages[0]' \
+                            --output text
+                        """, returnStdout: true).trim()
 
-                        // Check if version file exists, otherwise start with version=1
-                        def versionFile = "version.txt"
-                        def currentVersion = 1
-                        if (fileExists(versionFile)) {
-                            currentVersion = readFile(versionFile).trim().toInteger() + 1
+                        // Extract the version number from the version stage (e.g., "v-20241011-115612, version=1")
+                        def currentVersion = currentVersionStageOutput.find(/version=(\\d+)/) { match, version ->
+                            return version.toInteger()
                         }
 
-                        // Update the version file with the new version
-                        writeFile(file: versionFile, text: "${currentVersion}")
+                        // If no version is found, start with version=1
+                        if (currentVersion == null) {
+                            currentVersion = 1
+                        } else {
+                            // Increment the existing version
+                            currentVersion++
+                        }
 
-                        // Formulate the version stage name: "v-<timestamp>, version=<currentVersion>"
-                        def versionStage = "v-${currentTime}, version=${currentVersion}"
+                        // Get the current timestamp
+                        def currentTime = sh(script: "date +'%Y%m%d-%H%M%S'", returnStdout: true).trim()
 
-                        // Create or update the secret with the dynamically generated version stage
+                        // Create the new version stage with incremented version
+                        def newVersionStage = "v-${currentTime}, version=${currentVersion}"
+
+                        // Create or update the secret with the new version stage
                         sh """
                         aws secretsmanager put-secret-value \
                             --secret-id ${params.SECRET_NAME} \
                             --secret-string "${params.SECRET_VALUE}" \
-                            --version-stages "${versionStage}"
+                            --version-stages "${newVersionStage}"
                         """
 
-                        echo "Created new secret version with stage: ${versionStage}"
+                        echo "Created new secret version with stage: ${newVersionStage}"
                     }
                 }
             }
