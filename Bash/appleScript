@@ -1,0 +1,42 @@
+-- Define the path to your CSV file
+set csvFile to "/Users/yourusername/Desktop/prospect_list.csv"
+
+-- Read the CSV file
+set fileContents to readFile(csvFile)
+set emailData to paragraphs of fileContents
+
+-- Process each line in the CSV, skipping the header
+repeat with i from 2 to count of emailData
+    set currentLine to item i of emailData
+    set {fullName, emailAddress} to parseCSVLine(currentLine)
+    
+    -- Create the personalized email content
+    set emailSubject to "Your Custom Subject"
+    set emailBody to "Dear " & fullName & "," & return & return & "This is your personalized message."
+
+    -- Send email via macOS Mail
+    tell application "Mail"
+        set newMessage to make new outgoing message with properties {subject:emailSubject, content:emailBody, visible:true}
+        tell newMessage
+            make new to recipient at end of to recipients with properties {address:emailAddress}
+            send
+        end tell
+    end tell
+end repeat
+
+-- Function to read the file content
+on readFile(filePath)
+    set theFile to POSIX file filePath
+    set fileRef to open for access theFile
+    set fileContents to read fileRef as «class utf8»
+    close access fileRef
+    return fileContents
+end readFile
+
+-- Function to parse CSV line into fields
+on parseCSVLine(theLine)
+    set AppleScript's text item delimiters to ","
+    set parsedLine to text items of theLine
+    set AppleScript's text item delimiters to ""
+    return parsedLine
+end parseCSVLine
