@@ -1,0 +1,59 @@
+To send notifications from ArgoCD to a Mattermost channel using a webhook, you can use the ArgoCD Notifications feature. Below is an example configuration to set this up:
+
+Prerequisites
+	1.	ArgoCD Notifications Controller should be installed in your cluster.
+	2.	You need the Mattermost webhook URL for the target channel.
+
+Example Configuration
+
+1. Edit the argocd-notifications-cm ConfigMap
+
+Update the argocd-notifications-cm ConfigMap in the argocd namespace to include a Mattermost webhook configuration.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  config.yaml: |
+    subscriptions:
+      mattermost:
+        - webhook: https://mattermost.example.com/hooks/your-webhook-url
+
+    templates:
+      mattermost-app-sync-status:
+        message: |
+          Application {{ .app.metadata.name }} has changed status to **{{ .app.status.sync.status }}**.
+          Sync Status: **{{ .app.status.sync.status }}**
+          Health Status: **{{ .app.status.health.status }}**
+
+    triggers:
+      - name: on-sync-status-change
+        condition: app.status.sync.status != "Synced"
+        template: mattermost-app-sync-status
+
+	•	subscriptions: Defines the Mattermost webhook URL.
+	•	templates: Customizes the message format for Mattermost notifications.
+	•	triggers: Configures when the notifications should be triggered, such as when the sync status changes.
+
+2. Patch or Apply ConfigMap
+
+Apply the updated ConfigMap:
+
+kubectl apply -f argocd-notifications-cm.yaml
+
+3. Configure ArgoCD Application for Notifications
+
+Annotate your ArgoCD application to enable notifications for the desired triggers:
+
+kubectl annotate application <application-name> \
+  notifications.argoproj.io/subscribe.on-sync-status-change=mattermost
+
+Replace <application-name> with your application name.
+
+Verify Setup
+	1.	Perform an action in ArgoCD that changes the sync status (e.g., sync an application or create a drift).
+	2.	Check your Mattermost channel for the notification.
+
+This setup will send sync status change notifications from ArgoCD to your Mattermost channel using the webhook. You can further customize templates and triggers as needed.
