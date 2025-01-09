@@ -1,0 +1,117 @@
+Document Title: Automating Application Deployment with GitHub Actions, AWS ECR, and ArgoCD
+
+Purpose
+
+This document outlines best practices for using GitHub Actions to automate building container images, pushing them to AWS ECR, and updating ArgoCD Helm values to deploy applications on EKS across multiple environments (prod, stage, dev).
+
+Workflow Overview
+	1.	Build and Push Docker Images: Use GitHub Actions to build container images for your application and push them to AWS ECR.
+	2.	Update Helm Values for ArgoCD: Modify a values file in a separate repository to update the container image for the application, triggering ArgoCD to deploy the changes to EKS.
+	3.	Conditional Logic for Environments: Apply separate pipelines and policies for dev, stage, and prod.
+
+Best Practices
+
+1. GitHub Actions Workflow Design
+	•	Use reusable workflows for shared steps like Docker build and push.
+	•	Implement separate workflows or job conditions for dev, stage, and prod:
+	•	Development: Automatic deployment upon merge to the dev branch.
+	•	Staging: Manual approval step before updating stage.
+	•	Production: Require multi-level approvals and validate testing in staging.
+
+2. AWS ECR Best Practices
+	•	Lifecycle Policies: Configure ECR lifecycle policies to delete unused images.
+	•	Tagging Strategy: Use meaningful tags (latest, dev, stage, prod, or version-based).
+	•	Access Management: Use least privilege principles for IAM roles accessing ECR.
+
+3. ArgoCD Integration
+	•	Repository Organization: Store ArgoCD Helm values in a dedicated Git repository.
+	•	Sync Policies:
+	•	Development: Auto-sync enabled for faster iteration.
+	•	Staging and Production: Manual sync to allow verification of changes.
+	•	Health Checks: Enable readiness and health checks for safer deployments.
+
+Sample GitHub Actions Workflow
+
+name: Build and Deploy to EKS
+
+on:
+  push:
+    branches:
+      - dev
+      - stage
+      - main  # Production branch
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Tag Docker Image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ secrets.ECR_URI }}:${IMAGE_TAG} .
+          docker push ${{ secrets.ECR_URI }}:${IMAGE_TAG}
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+
+  update-helm-values:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone ArgoCD Helm Repo
+        uses: actions/checkout@v3
+        with:
+          repository: your-org/argocd-helm-values
+          path: helm-values
+
+      - name: Update Helm Values for Environment
+        run: |
+          ENVIRONMENT=${{ github.ref_name }}
+          IMAGE_URI="${{ secrets.ECR_URI }}:${{ env.IMAGE_TAG }}"
+          HELM_VALUES_FILE=helm-values/${ENVIRONMENT}/values.yaml
+
+          yq eval ".image.repository = \"${{ secrets.ECR_URI }}\" | .image.tag = \"${{ env.IMAGE_TAG }}\"" -i $HELM_VALUES_FILE
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add $HELM_VALUES_FILE
+          git commit -m "Update image to $IMAGE_URI"
+          git push origin main
+
+      - name: Trigger ArgoCD Sync (Optional for prod and stage)
+        if: ${{ github.ref_name != 'dev' }}
+        run: |
+          echo "Manual sync required for stage and prod environments."
+
+Conditional Deployment Logic
+	1.	Development:
+	•	Automatically update Helm values and sync ArgoCD.
+	2.	Staging:
+	•	Require manual approval before updating Helm values.
+	•	Sync ArgoCD after manual confirmation.
+	3.	Production:
+	•	Require approvals from at least two reviewers.
+	•	Validate testing and readiness before deployment.
+
+Security Considerations
+	•	Rotate AWS credentials regularly using secrets management tools.
+	•	Enable GitHub branch protections for stage and prod.
+	•	Restrict write permissions to ArgoCD Helm values repository.
+
+Future Improvements
+	•	Integrate unit and integration tests into the pipeline.
+	•	Add notifications (e.g., Slack, email) for pipeline statuses.
+	•	Enable rollback mechanisms using ArgoCD’s features.
+
+Let me know if you’d like any specific adjustments!
