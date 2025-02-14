@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+
+    environment {
+        REPO_URL = 'git@github.com:your-username/your-repo.git'  // Use SSH or HTTPS
+        BRANCH_NAME = 'new-feature-branch'
+        FILE1 = 'folder1/new_file1.txt'
+        FILE2 = 'folder2/new_file2.txt'
+        GITHUB_REPO = 'your-username/your-repo'  // GitHub repo in 'owner/repo' format
+        GITHUB_TOKEN = credentials('GITHUB_TOKEN')  // Store your GitHub token in Jenkins Credentials
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                script {
+                    sh """
+                        rm -rf repo && git clone $REPO_URL repo
+                        cd repo
+                        git checkout -b $BRANCH_NAME
+                    """
+                }
+            }
+        }
+
+        stage('Create Files') {
+            steps {
+                script {
+                    sh """
+                        cd repo
+                        mkdir -p \$(dirname "$FILE1") \$(dirname "$FILE2")
+                        echo "This is file 1 content" > "$FILE1"
+                        echo "This is file 2 content" > "$FILE2"
+                        git add "$FILE1" "$FILE2"
+                        git commit -m "Added two new files in respective folders"
+                    """
+                }
+            }
+        }
+
+        stage('Push Branch') {
+            steps {
+                script {
+                    sh """
+                        cd repo
+                        git push origin $BRANCH_NAME
+                    """
+                }
+            }
+        }
+
+        stage('Create Pull Request') {
+            steps {
+                script {
+                    def prData = """
+                    {
+                        "title": "Added new files",
+                        "body": "This PR adds two new files based on given inputs.",
+                        "head": "$BRANCH_NAME",
+                        "base": "main"
+                    }
+                    """
+
+                    sh """
+                        curl -X POST -H "Authorization: token $GITHUB_TOKEN" \
+                             -H "Accept: application/vnd.github.v3+json" \
+                             https://api.github.com/repos/$GITHUB_REPO/pulls \
+                             -d '$prData'
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'PR created successfully!'
+        }
+        failure {
+            echo 'Something went wrong.'
+        }
+    }
+}
