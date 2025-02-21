@@ -1,0 +1,52 @@
+repoServer:
+  serviceAccount:
+    name: argocd-repo-server  # Ensure this SA has IRSA attached
+
+  extraContainers:
+    - name: sops-sidecar
+      image: mozilla/sops:latest  # Official SOPS image
+      command: ["/bin/sh", "-c"]
+      args:
+        - while true; do sleep 30; done;
+      volumeMounts:
+        - name: sops-config
+          mountPath: /etc/sops
+
+  volumes:
+    - name: sops-config
+      configMap:
+        name: sops-config
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sops-config
+  namespace: argocd
+data:
+  decrypt.sh: |
+    #!/bin/sh
+    FILE="$1"
+
+    # Check if the file name contains 'configmap-' (only decrypt these)
+    if echo "$FILE" | grep -q "configmap-"; then
+      echo "Decrypting ConfigMap: $FILE"
+      sops -d "$FILE"
+    else
+      echo "Skipping decryption for: $FILE"
+      cat "$FILE"
+    fi
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  configManagementPlugins: |
+    - name: sops
+      generate:
+        command: [ "/bin/sh", "/etc/sops/decrypt.sh" ]
+
+---
