@@ -1,0 +1,61 @@
+node {
+    def awsAccountId = "123456789012"
+    def awsRegion = "us-east-1"
+    def repositoryName = "your-app"
+    def imageTag = "latest"
+    def registryECR = "${awsAccountId}.dkr.ecr.${awsRegion}.amazonaws.com"
+    def registryDockerHub = "your-dockerhub-username"
+    
+    def ecrCredentials = 'ecr-credentials' // Jenkins credentials ID
+    def dockerHubCredentials = 'docker-hub-credentials' // Jenkins credentials ID
+
+    def dockerImage
+
+    stage('Checkout Code') {
+        checkout scm
+    }
+
+    stage('Login to Registries') {
+        parallel(
+            "Login to AWS ECR": {
+                sh """
+                    aws ecr get-login-password --region ${awsRegion} | docker login --username AWS --password-stdin ${registryECR}
+                """
+            },
+            "Login to Docker Hub": {
+                docker.withRegistry('https://index.docker.io/v1/', dockerHubCredentials) {
+                    echo "Logged in to Docker Hub"
+                }
+            }
+        )
+    }
+
+    stage('Build Docker Image') {
+        dockerImage = docker.build("${repositoryName}:${imageTag}")
+    }
+
+    stage('Tag and Push in Parallel') {
+        parallel(
+            "Push to Docker Hub": {
+                docker.withRegistry('https://index.docker.io/v1/', dockerHubCredentials) {
+                    dockerImage.tag("${registryDockerHub}/${repositoryName}:latest")
+                    docker.image("${registryDockerHub}/${repositoryName}:latest").push()
+                }
+            },
+            "Push to AWS ECR": {
+                docker.withRegistry("https://${registryECR}", ecrCredentials) {
+                    dockerImage.tag("${registryECR}/${repositoryName}:latest")
+                    docker.image("${registryECR}/${repositoryName}:latest").push()
+                }
+            }
+        )
+    }
+
+    stage('Cleanup') {
+        sh """
+            docker rmi ${repositoryName}:${imageTag} || true
+            docker rmi ${registryDockerHub}/${repositoryName}:latest || true
+            docker rmi ${registryECR}/${repositoryName}:latest || true
+        """
+    }
+}
