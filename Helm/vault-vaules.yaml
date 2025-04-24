@@ -1,0 +1,57 @@
+vault:
+  global:
+    tlsDisable: false
+
+  server:
+    ha:
+      enabled: true
+      replicas: 3
+
+    standalone:
+      enabled: false
+
+    ha:
+      enabled: true
+      config: |
+        ui = true
+
+        storage "postgresql" {
+          connection_url = "postgresql://<user>:<password>@<rds-endpoint>:5432/<dbname>?sslmode=disable"
+          table = "vault_store"
+        }
+
+        listener "tcp" {
+          address = "0.0.0.0:8200"
+          tls_disable = false
+          tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-server-tls/tls.key"
+        }
+
+        seal "awskms" {
+          region = "<aws-region>"
+          kms_key_id = "<kms-key-id>"
+        }
+
+        api_addr = "https://vault.<yourdomain>:8200"
+        cluster_addr = "https://vault-internal.<yourdomain>:8201"
+
+        disable_mlock = true
+
+    service:
+      type: ClusterIP  # Use LoadBalancer if external access is needed
+
+    extraVolumes:
+      - name: vault-server-tls
+        secret:
+          secretName: vault-server-tls
+
+    extraVolumeMounts:
+      - name: vault-server-tls
+        mountPath: /vault/userconfig/vault-server-tls
+        readOnly: true
+
+  injector:
+    enabled: true
+
+  ui:
+    enabled: true
