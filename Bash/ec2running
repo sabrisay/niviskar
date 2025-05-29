@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Input: list of EC2 hostnames (one per line)
+HOSTNAMES_FILE="hostnames.txt"
+OUTPUT_FILE="running_filtered_hosts.txt"
+
+# Temp file to hold running EC2 instance hostnames
+RUNNING_HOSTS_FILE=$(mktemp)
+
+# Fetch private and public DNS names of all running EC2 instances
+aws ec2 describe-instances \
+  --filters Name=instance-state-name,Values=running \
+  --query "Reservations[].Instances[].[PrivateDnsName, PublicDnsName]" \
+  --output text | tr '\t' '\n' | sort -u > "$RUNNING_HOSTS_FILE"
+
+# Filter and write matching hostnames to the output file
+grep -Ff "$HOSTNAMES_FILE" "$RUNNING_HOSTS_FILE" > "$OUTPUT_FILE"
+
+echo "Filtered running hostnames written to: $OUTPUT_FILE"
+
+# Clean up temporary file
+rm -f "$RUNNING_HOSTS_FILE"
