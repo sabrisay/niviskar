@@ -1,0 +1,4 @@
+{
+  "pipeline_name": "MLOpsPipeline",
+  "pipeline_role": "your-sagemaker-execution-role"
+}
